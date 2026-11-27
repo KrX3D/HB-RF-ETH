@@ -51,6 +51,12 @@ RawUartUdpListener::RawUartUdpListener(RadioModuleConnector *radioModuleConnecto
     atomic_init(&_remoteAddress, 0u);
     atomic_init(&_counter, 0);
     atomic_init(&_endpointConnectionIdentifier, 1);
+    atomic_init(&_ccuRestartRequired, false);
+}
+
+bool RawUartUdpListener::isCcuRestartRequired()
+{
+    return atomic_load(&_ccuRestartRequired);
 }
 
 void RawUartUdpListener::handlePacket(pbuf *pb, ip4_addr_t addr, uint16_t port)
@@ -89,6 +95,7 @@ void RawUartUdpListener::handlePacket(pbuf *pb, ip4_addr_t addr, uint16_t port)
             atomic_store(&_connectionStarted, false);
             atomic_store(&_remoteAddress, addr.addr);
             atomic_store(&_remotePort, port);
+            atomic_store(&_ccuRestartRequired, false);
             _radioModuleConnector->setLED(true, true, false);
             response_buffer[0] = 1;
             response_buffer[1] = data[1];
@@ -105,13 +112,21 @@ void RawUartUdpListener::handlePacket(pbuf *pb, ip4_addr_t addr, uint16_t port)
             }
             else if (data[3] != (endpointConnectionIdentifier & 0xff))
             {
-                ESP_LOGE(TAG, "Received raw-uart reconnect packet with invalid endpoint identifier %d, should be %d", data[3], endpointConnectionIdentifier);
+                // The CCU retries every 500 ms, only log once a minute
+                int64_t now = esp_timer_get_time();
+                if (!atomic_load(&_ccuRestartRequired) || now - _lastRejectLog > 60000000)
+                {
+                    ESP_LOGE(TAG, "Received raw-uart reconnect packet with invalid endpoint identifier %d, should be %d. The CCU software has to be restarted.", data[3], endpointConnectionIdentifier);
+                    _lastRejectLog = now;
+                }
+                atomic_store(&_ccuRestartRequired, true);
                 return;
             }
 
             atomic_store(&_remotePort, (ushort)0);
             atomic_store(&_remoteAddress, addr.addr);
             atomic_store(&_remotePort, port);
+            atomic_store(&_ccuRestartRequired, false);
             _radioModuleConnector->setLED(true, true, false);
             response_buffer[0] = 2;
             response_buffer[1] = data[1];

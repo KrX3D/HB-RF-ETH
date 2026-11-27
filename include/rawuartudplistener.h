@@ -37,6 +37,8 @@ private:
     std::atomic<int> _counter;
     std::atomic<int> _endpointConnectionIdentifier;
     uint64_t _lastReceivedKeepAlive;
+    std::atomic<bool> _ccuRestartRequired;
+    int64_t _lastRejectLog = 0;
     udp_pcb *_pcb;
     QueueHandle_t _udp_queue;
     TaskHandle_t _tHandle = NULL;
@@ -51,6 +53,9 @@ public:
     void handleEvent();
 
     ip4_addr_t getConnectedRemoteAddress();
+    // true after the CCU tried to resume a session this board does not know (e.g. after a
+    // power loss of the board). The CCU software has to be restarted to connect again.
+    bool isCcuRestartRequired();
 
     void start();
     void stop();

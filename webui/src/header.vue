@@ -10,7 +10,14 @@
         <b-nav-item href="/about">{{ $t('about') }}</b-nav-item>
       </b-navbar-nav>
       <b-navbar-nav v-if="$store.state.login.isLoggedIn" class="ml-auto">
-        <b-nav-form>
+        <b-nav-form form-class="flex-nowrap">
+          <b-button
+            size="sm"
+            variant="outline-light"
+            class="mr-2"
+            :disabled="$store.state.system.restarting"
+            @click.prevent="restart"
+          >{{ $store.state.system.restarting ? $t('restarting') : $t('restart') }}</b-button>
           <b-button size="sm" variant="outline-light" @click.prevent="logout">{{ $t('logout') }}</b-button>
         </b-nav-form>
       </b-navbar-nav>
@@ -30,6 +37,11 @@ Vue.use(CollapsePlugin);
 export default {
   name: "Header",
   methods: {
+    restart() {
+      if (window.confirm(this.$t("restartConfirm"))) {
+        this.$store.dispatch("system/restart").catch(() => window.alert(this.$t("restartError")));
+      }
+    },
     logout() {
       this.$store.dispatch("login/logout");
       this.$router.go();
@@ -45,6 +57,11 @@ export default {
         firmware: "Firmware",
         about: "Über",
         logout: "Abmelden",
+        restart: "Neustart",
+        restarting: "Startet neu...",
+        restartConfirm:
+          "HB-RF-ETH jetzt neu starten? Die Verbindung zur CCU wird dabei getrennt, die CCU Software muss danach neu gestartet werden.",
+        restartError: "Der Neustart konnte nicht ausgelöst werden.",
       },
       en: {
         home: "Home",
@@ -52,6 +69,11 @@ export default {
         firmware: "Firmware",
         about: "About",
         logout: "Logout",
+        restart: "Restart",
+        restarting: "Restarting...",
+        restartConfirm:
+          "Restart the HB-RF-ETH now? This drops the connection to the CCU, the CCU software has to be restarted afterwards.",
+        restartError: "The restart could not be triggered.",
       }
     }
   }

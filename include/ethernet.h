@@ -52,6 +52,8 @@ public:
   void start();
   void stop();
 
+  // true while the link is up and an IP address is assigned
+  bool isConnected();
   void getNetworkSettings(ip4_addr_t *ip, ip4_addr_t *netmask, ip4_addr_t *gateway, ip4_addr_t *dns1, ip4_addr_t *dns2);
 
   void _handleETHEvent(esp_event_base_t event_base, int32_t event_id, void *event_data);

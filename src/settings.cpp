@@ -18,6 +18,7 @@
  */
 
 #include "settings.h"
+#include <ctype.h>
 #include "nvs.h"
 #include "nvs_flash.h"
 #include <string.h>
@@ -66,6 +67,8 @@ static const char *NVS_NAMESPACE = "HB-RF-ETH";
 #define SET_INT(handle, name, var) ESP_ERROR_CHECK_WITHOUT_ABORT(nvs_set_i32(handle, name, var));
 #define SET_STR(handle, name, var) ESP_ERROR_CHECK_WITHOUT_ABORT(nvs_set_str(handle, name, var));
 #define SET_BOOL(handle, name, var) ESP_ERROR_CHECK_WITHOUT_ABORT(nvs_set_i8(handle, name, var ? 1 : 0));
+
+#define DEFAULT_UPDATE_REPO "alexreinert/HB-RF-ETH"
 
 void Settings::load()
 {
@@ -124,6 +127,14 @@ void Settings::load()
   GET_STR(handle, "mqttTopic", _mqttTopicPrefix, "");
   GET_INT(handle, "mqttInterval", _mqttInterval, 60);
   GET_BOOL(handle, "mqttHaDisc", _mqttHaDiscovery, true);
+  GET_BOOL(handle, "mqttCommands", _mqttCommands, true);
+
+  GET_BOOL(handle, "nwdEnabled", _nwdEnabled, false);
+  GET_INT(handle, "nwdTimeout", _nwdTimeout, 10);
+
+  GET_STR(handle, "updateRepo", _updateRepo, DEFAULT_UPDATE_REPO);
+  GET_INT(handle, "updateIntvl", _updateInterval, 8);
+  GET_BOOL(handle, "updateAuto", _updateAuto, false);
 
   nvs_close(handle);
 }
@@ -162,6 +173,14 @@ void Settings::save()
   SET_STR(handle, "mqttTopic", _mqttTopicPrefix);
   SET_INT(handle, "mqttInterval", _mqttInterval);
   SET_BOOL(handle, "mqttHaDisc", _mqttHaDiscovery);
+  SET_BOOL(handle, "mqttCommands", _mqttCommands);
+
+  SET_BOOL(handle, "nwdEnabled", _nwdEnabled);
+  SET_INT(handle, "nwdTimeout", _nwdTimeout);
+
+  SET_STR(handle, "updateRepo", _updateRepo);
+  SET_INT(handle, "updateIntvl", _updateInterval);
+  SET_BOOL(handle, "updateAuto", _updateAuto);
 
   ESP_ERROR_CHECK_WITHOUT_ABORT(nvs_commit(handle));
 
@@ -347,4 +366,58 @@ void Settings::setMqttSettings(bool enabled, const char *server, int port, const
   copySetting(_mqttTopicPrefix, topicPrefix, sizeof(_mqttTopicPrefix));
   _mqttInterval = (interval >= 5 && interval <= 3600) ? interval : 60;
   _mqttHaDiscovery = haDiscovery;
+}
+
+bool Settings::getMqttCommands()
+{
+  return _mqttCommands;
+}
+
+void Settings::setMqttCommands(bool enabled)
+{
+  _mqttCommands = enabled;
+}
+
+bool Settings::getNetworkWatchdogEnabled()
+{
+  return _nwdEnabled;
+}
+
+int Settings::getNetworkWatchdogTimeout()
+{
+  return _nwdTimeout;
+}
+
+void Settings::setNetworkWatchdog(bool enabled, int timeoutMinutes)
+{
+  _nwdEnabled = enabled;
+  _nwdTimeout = (timeoutMinutes >= 2 && timeoutMinutes <= 1440) ? timeoutMinutes : 10;
+}
+
+char *Settings::getUpdateRepo()
+{
+  return _updateRepo;
+}
+
+int Settings::getUpdateInterval()
+{
+  return _updateInterval;
+}
+
+bool Settings::getUpdateAuto()
+{
+  return _updateAuto;
+}
+
+void Settings::setUpdateSettings(const char *repo, int intervalHours, bool autoInstall)
+{
+  // only "owner/name" with characters GitHub allows, otherwise fall back to the default
+  bool valid = repo != NULL && strchr(repo, '/') != NULL && strlen(repo) < sizeof(_updateRepo);
+  for (const char *c = repo; valid && *c; c++)
+  {
+    valid = isalnum((unsigned char)*c) || *c == '-' || *c == '_' || *c == '.' || *c == '/';
+  }
+  copySetting(_updateRepo, valid ? repo : DEFAULT_UPDATE_REPO, sizeof(_updateRepo));
+  _updateInterval = (intervalHours >= 1 && intervalHours <= 168) ? intervalHours : 8;
+  _updateAuto = autoInstall;
 }

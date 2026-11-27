@@ -48,6 +48,8 @@ public:
     // IPv4 address of the connected CCU / debmatic / piVCCU, 0 if none is connected
     uint32_t getCcuAddress();
 
+    // true if the CCU tried to resume a session this board does not know, see RawUartUdpListener
+    bool isCcuRestartRequired();
     const char *getSerialNumber();
     const char *getHostname();
     const char *getFirmwareVersion();

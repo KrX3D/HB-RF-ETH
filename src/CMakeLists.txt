@@ -9,3 +9,4 @@ target_add_binary_data(${COMPONENT_TARGET} "../webui/dist/main.1e43358e.css.gz" 
 target_add_binary_data(${COMPONENT_TARGET} "../webui/dist/main.1e43358e.js.gz" BINARY)
 target_add_binary_data(${COMPONENT_TARGET} "../webui/dist/index.html.gz" BINARY)
 target_add_binary_data(${COMPONENT_TARGET} "../webui/dist/favicon.26242483.ico.gz" BINARY)
+target_add_binary_data(${COMPONENT_TARGET} "../certs/github_ca.pem" TEXT)

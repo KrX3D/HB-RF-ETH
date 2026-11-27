@@ -60,6 +60,14 @@ private:
   char _mqttTopicPrefix[65] = {0};
   int _mqttInterval;
   bool _mqttHaDiscovery;
+  bool _mqttCommands;
+
+  bool _nwdEnabled;
+  int _nwdTimeout;
+
+  char _updateRepo[65] = {0};
+  int _updateInterval;
+  bool _updateAuto;
 
 public:
   Settings();
@@ -106,4 +114,17 @@ public:
 
   // password == NULL keeps the currently stored password
   void setMqttSettings(bool enabled, const char *server, int port, const char *user, const char *password, const char *topicPrefix, int interval, bool haDiscovery);
+  bool getMqttCommands();
+  void setMqttCommands(bool enabled);
+
+  // Restarts the board if the network is unreachable for timeout minutes
+  bool getNetworkWatchdogEnabled();
+  int getNetworkWatchdogTimeout();
+  void setNetworkWatchdog(bool enabled, int timeoutMinutes);
+
+  // GitHub repository ("owner/name") used for the online update check
+  char *getUpdateRepo();
+  int getUpdateInterval();
+  bool getUpdateAuto();
+  void setUpdateSettings(const char *repo, int intervalHours, bool autoInstall);
 };

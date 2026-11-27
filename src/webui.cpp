@@ -25,6 +25,7 @@
 #include "esp_log.h"
 #include "cJSON.h"
 #include "esp_ota_ops.h"
+#include "systemcontrol.h"
 #include "mbedtls/md.h"
 #include "mbedtls/base64.h"
 
@@ -191,6 +192,8 @@ esp_err_t get_sysinfo_json_handler_func(httpd_req_t *req)
     cJSON_AddNumberToObject(sysinfo, "cpuUsage", _sysInfo->getCpuUsage());
 
     cJSON_AddStringToObject(sysinfo, "rawUartRemoteAddress", ip2str(_rawUartUdpListener->getConnectedRemoteAddress()));
+    cJSON_AddBoolToObject(sysinfo, "ccuRestartRequired", _rawUartUdpListener->isCcuRestartRequired());
+    cJSON_AddStringToObject(sysinfo, "resetReason", SystemControl::getResetReason());
 
     switch (_radioModuleDetector->getRadioModuleType())
     {
@@ -283,6 +286,27 @@ void add_settings(cJSON *root)
     cJSON_AddStringToObject(settings, "mqttTopicPrefix", _settings->getMqttTopicPrefix());
     cJSON_AddNumberToObject(settings, "mqttInterval", _settings->getMqttInterval());
     cJSON_AddBoolToObject(settings, "mqttHaDiscovery", _settings->getMqttHaDiscovery());
+    cJSON_AddBoolToObject(settings, "mqttCommands", _settings->getMqttCommands());
+
+    cJSON_AddBoolToObject(settings, "networkWatchdog", _settings->getNetworkWatchdogEnabled());
+    cJSON_AddNumberToObject(settings, "networkWatchdogTimeout", _settings->getNetworkWatchdogTimeout());
+
+    cJSON_AddStringToObject(settings, "updateRepo", _settings->getUpdateRepo());
+    cJSON_AddNumberToObject(settings, "updateInterval", _settings->getUpdateInterval());
+    cJSON_AddBoolToObject(settings, "updateAuto", _settings->getUpdateAuto());
+}
+
+// Settings that are only applied at startup. Used to tell the user whether a restart is needed.
+static void restartRelevantSettings(char *buf, size_t len)
+{
+    snprintf(buf, len, "%s|%d|%08x|%08x|%08x|%08x|%08x|%d|%d|%d|%s|%d|%s|%d|%s|%s|%s|%d|%d|%d",
+             _settings->getHostname(), _settings->getUseDHCP(),
+             (unsigned)_settings->getLocalIP().addr, (unsigned)_settings->getNetmask().addr, (unsigned)_settings->getGateway().addr,
+             (unsigned)_settings->getDns1().addr, (unsigned)_settings->getDns2().addr,
+             (int)_settings->getTimesource(), _settings->getDcfOffset(), _settings->getGpsBaudrate(), _settings->getNtpServer(),
+             _settings->getMqttEnabled(), _settings->getMqttServer(), _settings->getMqttPort(), _settings->getMqttUser(),
+             _settings->getMqttPassword(), _settings->getMqttTopicPrefix(), _settings->getMqttInterval(),
+             _settings->getMqttHaDiscovery(), _settings->getMqttCommands());
 }
 
 esp_err_t get_settings_json_handler_func(httpd_req_t *req)
@@ -388,6 +412,12 @@ esp_err_t post_settings_json_handler_func(httpd_req_t *req)
 
         int ledBrightness = cJSON_GetIntValue(cJSON_GetObjectItem(root, "ledBrightness"), _settings->getLEDBrightness());
 
+        char before[512], after[512];
+        restartRelevantSettings(before, sizeof(before));
+        char oldRepo[65];
+        strncpy(oldRepo, _settings->getUpdateRepo(), sizeof(oldRepo) - 1);
+        oldRepo[sizeof(oldRepo) - 1] = 0;
+
         if (adminPassword && strlen(adminPassword) > 0)
             _settings->setAdminPassword(adminPassword);
 
@@ -410,8 +440,28 @@ esp_err_t post_settings_json_handler_func(httpd_req_t *req)
             cJSON_GetStringValue(cJSON_GetObjectItem(root, "mqttTopicPrefix"), _settings->getMqttTopicPrefix()),
             cJSON_GetIntValue(cJSON_GetObjectItem(root, "mqttInterval"), _settings->getMqttInterval()),
             cJSON_GetBoolValue(cJSON_GetObjectItem(root, "mqttHaDiscovery"), _settings->getMqttHaDiscovery()));
+        _settings->setMqttCommands(cJSON_GetBoolValue(cJSON_GetObjectItem(root, "mqttCommands"), _settings->getMqttCommands()));
+
+        _settings->setNetworkWatchdog(
+            cJSON_GetBoolValue(cJSON_GetObjectItem(root, "networkWatchdog"), _settings->getNetworkWatchdogEnabled()),
+            cJSON_GetIntValue(cJSON_GetObjectItem(root, "networkWatchdogTimeout"), _settings->getNetworkWatchdogTimeout()));
+
+        _settings->setUpdateSettings(
+            cJSON_GetStringValue(cJSON_GetObjectItem(root, "updateRepo"), _settings->getUpdateRepo()),
+            cJSON_GetIntValue(cJSON_GetObjectItem(root, "updateInterval"), _settings->getUpdateInterval()),
+            cJSON_GetBoolValue(cJSON_GetObjectItem(root, "updateAuto"), _settings->getUpdateAuto()));
 
         _settings->save();
+
+        // applied immediately
+        LED::setBrightness(_settings->getLEDBrightness());
+        if (strcmp(oldRepo, _settings->getUpdateRepo()) != 0)
+            _updateCheck->requestCheck();
+
+        restartRelevantSettings(after, sizeof(after));
+        bool restartRequired = strcmp(before, after) != 0;
+        memset(before, 0, sizeof(before));
+        memset(after, 0, sizeof(after));
 
         cJSON_Delete(root);
 
@@ -419,6 +469,7 @@ esp_err_t post_settings_json_handler_func(httpd_req_t *req)
         root = cJSON_CreateObject();
 
         add_settings(root);
+        cJSON_AddBoolToObject(root, "restartRequired", restartRequired);
 
         const char *json = cJSON_Print(root);
         httpd_resp_sendstr(req, json);
@@ -435,6 +486,94 @@ httpd_uri_t post_settings_json_handler = {
     .uri = "/settings.json",
     .method = HTTP_POST,
     .handler = post_settings_json_handler_func,
+    .user_ctx = NULL};
+
+#define REQUIRE_AUTH(req)                                \
+    if (validate_auth(req) != ESP_OK)                    \
+    {                                                    \
+        httpd_resp_set_status(req, "401 Not authorized"); \
+        httpd_resp_sendstr(req, "401 Not authorized");   \
+        return ESP_OK;                                   \
+    }
+
+esp_err_t post_restart_handler_func(httpd_req_t *req)
+{
+    REQUIRE_AUTH(req);
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"restarting\":true}");
+    SystemControl::restart("webui");
+    return ESP_OK;
+}
+
+httpd_uri_t post_restart_handler = {
+    .uri = "/api/restart",
+    .method = HTTP_POST,
+    .handler = post_restart_handler_func,
+    .user_ctx = NULL};
+
+static void send_update_status(httpd_req_t *req, bool accepted)
+{
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddBoolToObject(root, "accepted", accepted);
+    _updateCheck->addToJson(root);
+
+    httpd_resp_set_type(req, "application/json");
+    const char *json = cJSON_Print(root);
+    httpd_resp_sendstr(req, json);
+    free((void *)json);
+    cJSON_Delete(root);
+}
+
+esp_err_t get_update_handler_func(httpd_req_t *req)
+{
+    REQUIRE_AUTH(req);
+    send_update_status(req, true);
+    return ESP_OK;
+}
+
+httpd_uri_t get_update_handler = {
+    .uri = "/api/update",
+    .method = HTTP_GET,
+    .handler = get_update_handler_func,
+    .user_ctx = NULL};
+
+esp_err_t post_update_check_handler_func(httpd_req_t *req)
+{
+    REQUIRE_AUTH(req);
+    _updateCheck->requestCheck();
+    send_update_status(req, true);
+    return ESP_OK;
+}
+
+httpd_uri_t post_update_check_handler = {
+    .uri = "/api/update/check",
+    .method = HTTP_POST,
+    .handler = post_update_check_handler_func,
+    .user_ctx = NULL};
+
+// Body {"force": true} also installs an older or the same version
+esp_err_t post_update_install_handler_func(httpd_req_t *req)
+{
+    REQUIRE_AUTH(req);
+
+    bool force = false;
+    char buffer[128];
+    if (receive_body(req, buffer, sizeof(buffer)) > 0)
+    {
+        cJSON *root = cJSON_Parse(buffer);
+        force = cJSON_GetBoolValue(cJSON_GetObjectItem(root, "force"), false);
+        cJSON_Delete(root);
+    }
+
+    send_update_status(req, _updateCheck->requestInstall(force));
+    return ESP_OK;
+}
+
+httpd_uri_t post_update_install_handler = {
+    .uri = "/api/update/install",
+    .method = HTTP_POST,
+    .handler = post_update_install_handler_func,
     .user_ctx = NULL};
 
 #define OTA_CHECK(a, str, ...)                                                    \
@@ -553,7 +692,7 @@ void WebUI::start()
 {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.lru_purge_enable = true;
-    config.max_uri_handlers = 16;
+    config.max_uri_handlers = 20;
     config.stack_size = 6144;
     config.uri_match_fn = httpd_uri_match_wildcard;
 
@@ -567,6 +706,10 @@ void WebUI::start()
         httpd_register_uri_handler(_httpd_handle, &get_settings_json_handler);
         httpd_register_uri_handler(_httpd_handle, &post_settings_json_handler);
         httpd_register_uri_handler(_httpd_handle, &post_ota_update_handler);
+        httpd_register_uri_handler(_httpd_handle, &post_restart_handler);
+        httpd_register_uri_handler(_httpd_handle, &get_update_handler);
+        httpd_register_uri_handler(_httpd_handle, &post_update_check_handler);
+        httpd_register_uri_handler(_httpd_handle, &post_update_install_handler);
 
         httpd_register_uri_handler(_httpd_handle, &main_1e43358e_js_gz_handler);
         httpd_register_uri_handler(_httpd_handle, &main_1e43358e_css_gz_handler);

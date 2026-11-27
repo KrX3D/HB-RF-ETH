@@ -2,7 +2,7 @@
 
 > **Hinweis:** Dieses Repository ist ein Fork von (https://github.com/alexreinert/HB-RF-ETH)), ursprünglich entwickelt von Alexander Reinert. Die Urheberschaft des ursprünglichen Projekts liegt vollständig beim Originalautor.
 > 
-> **Zweck dieses Forks:** Erweiterung der Firmware um eine API und MQTT zur Überwachung des Verbindungszustandes zwischen OpenCCU und der HB-RF-ETH.
+> **Zweck dieses Forks:** Erweiterung der Firmware um eine API und MQTT zur Überwachung des Verbindungszustandes zwischen OpenCCU und der HB-RF-ETH, Neustart per WebUI/MQTT, Erkennung "CCU muss neu gestartet werden", Netzwerk-Watchdog und Online-Updates aus einem GitHub Repository.
 > 
 
 ### Unterstützung [<img src="https://ko-fi.com/img/githubbutton_sm.svg" height="20" alt="Support me on Ko-fi">](https://ko-fi.com/alexreinert) [<img src="https://img.shields.io/badge/donate-PayPal-green.svg" height="20" alt="Donate via Paypal">](https://www.paypal.com/donate/?cmd=_s-xclick&hosted_button_id=4PW43VJ2DZ7R2)
@@ -41,6 +41,16 @@ Hierbei gilt, dass bei einer debmatic oder piVCCU3 Installation immer nur ein Fu
 * MQTT Anbindung inkl. optionaler Home Assistant Discovery (siehe unten)
 
 ### REST-API
+Mit Login (Header `Authorization: Token <token>` aus `/login.json`):
+
+| Methode | Pfad | Wirkung |
+| --- | --- | --- |
+| `POST` | `/api/restart` | Neustart |
+| `GET` | `/api/update` | Status des Online-Updates |
+| `POST` | `/api/update/check` | Jetzt nach Updates suchen |
+| `POST` | `/api/update/install` | Neuere Firmware installieren (`{"force": true}` erlaubt auch gleiche/ältere Versionen) |
+
+
 Der Status kann ohne Anmeldung per `GET http://<hb-rf-eth>/api/v1/status` als JSON abgerufen werden:
 
 ```json
@@ -54,11 +64,13 @@ Der Status kann ohne Anmeldung per `GET http://<hb-rf-eth>/api/v1/status` als JS
     "uptime": 86400,
     "cpuUsage": 1.95,
     "memoryUsage": 41.71,
-    "ipAddress": "192.168.20.10"
+    "ipAddress": "192.168.20.10",
+    "resetReason": "power_on"
   },
   "ccu": {
     "connected": true,
-    "address": "192.168.20.2"
+    "address": "192.168.20.2",
+    "restartRequired": false
   },
   "radioModule": {
     "detected": true,
@@ -68,27 +80,86 @@ Der Status kann ohne Anmeldung per `GET http://<hb-rf-eth>/api/v1/status` als JS
     "hmIPRadioMAC": "0xBE8379",
     "sgtin": "3014F711A061A7D70992AC89",
     "firmwareVersion": "1.4.1"
+  },
+  "update": {
+    "state": "up_to_date",
+    "repo": "alexreinert/HB-RF-ETH",
+    "installedVersion": "1.4.0",
+    "latestVersion": "1.3.0",
+    "available": false,
+    "installable": true,
+    "releaseUrl": "https://github.com/alexreinert/HB-RF-ETH/releases/tag/v1.3.0",
+    "progress": 0,
+    "error": ""
+  },
+  "settings": {
+    "ledBrightness": 100,
+    "networkWatchdog": false,
+    "networkWatchdogTimeout": 10
   }
 }
 ```
 
 * `uptime` in Sekunden, `cpuUsage` und `memoryUsage` in Prozent
 * `ccu.connected` ist `true`, solange eine CCU (debmatic / piVCCU3) per raw-uart verbunden ist, `ccu.address` ist dann ihre IP Adresse
+* `ccu.restartRequired` ist `true`, wenn die CCU eine Verbindung fortsetzen will, die die Platine nicht mehr kennt (z.B. nach einem Stromausfall der Platine). Dann muss die CCU Software neu gestartet werden.
+* `device.resetReason`: `power_on`, `brownout`, `task_watchdog`, `watchdog`, `panic`, `webui`, `mqtt`, `update`, `rollback`, `network_watchdog`, `software` oder `other`
+* `update.state`: `idle`, `checking`, `up_to_date`, `available`, `error`, `installing` oder `installed`
 
 ### MQTT
-MQTT wird in der WebUI unter Einstellungen aktiviert (Broker, Port, optional Benutzer/Passwort, Topic Präfix, Sendeintervall, Home Assistant Discovery). Änderungen werden nach einem Neustart aktiv.
+MQTT wird in der WebUI unter Einstellungen aktiviert (Broker, Port, optional Benutzer/Passwort, Topic Präfix, Sendeintervall, Home Assistant Discovery, MQTT Befehle). Änderungen werden nach einem Neustart aktiv.
 
 | Topic | Inhalt |
 | --- | --- |
 | `<präfix>/status` | `online` bzw. `offline` (retained, `offline` als Last Will) |
 | `<präfix>/state` | JSON, identisch zu `/api/v1/status` (retained) |
+| `<präfix>/update` | JSON für die Home Assistant MQTT Update Entität (retained) |
+
+Sind die MQTT Befehle aktiv (Standard), werden diese Topics abonniert:
+
+| Topic | Payload | Wirkung |
+| --- | --- | --- |
+| `<präfix>/command/restart` | beliebig | Neustart der Platine |
+| `<präfix>/command/led_brightness` | `0` - `100` | LED Helligkeit, sofort aktiv und gespeichert |
+| `<präfix>/command/network_watchdog` | `ON` / `OFF` | Netzwerk-Watchdog ein/aus |
+| `<präfix>/command/update` | `install` / `check` | Neuere Firmware installieren bzw. jetzt nach Updates suchen |
+
+Jeder, der auf diese Topics schreiben darf, kann die Platine neu starten oder eine Firmware installieren. Der Broker sollte daher eine Anmeldung erfordern.
 
 Der Präfix ist standardmäßig `hb-rf-eth/<Seriennummer>`. Der Status wird im eingestellten Intervall (Standard 60 Sekunden) und zusätzlich sofort bei einer Verbindung oder Trennung der CCU gesendet.
 
-Ist die Home Assistant Discovery aktiv, werden unter `homeassistant/...` Konfigurationen gesendet, sodass Home Assistant das HB-RF-ETH automatisch als Gerät mit Sensoren (u.a. CCU verbunden, Funkmodultyp, Seriennummer, Funkadressen, SGTIN, CPU/Speicher, Uptime) anlegt.
+Ist die Home Assistant Discovery aktiv, werden unter `homeassistant/...` Konfigurationen gesendet, sodass Home Assistant das HB-RF-ETH automatisch als Gerät mit Sensoren (u.a. CCU verbunden, Funkmodultyp, Seriennummer, Funkadressen, SGTIN, CPU/Speicher, Uptime) anlegt. Mit aktiven MQTT Befehlen kommen ein Neustart Knopf, ein Knopf "Nach Firmware Update suchen", die LED Helligkeit, der Netzwerk-Watchdog und eine Firmware Update Entität hinzu, außerdem die Sensoren "CCU restart required" und "Last restart reason".
+
+### Neustart und CCU Reconnect
+Die Platine kann über die WebUI (Knopf "Neustart" oben rechts), die API (`POST /api/restart`, mit Login) oder MQTT neu gestartet werden. Die LED Helligkeit wird sofort übernommen; Netzwerk-, Zeit- und MQTT Einstellungen brauchen einen Neustart, die WebUI weist darauf hin.
+
+Nach jedem Neustart der Platine (auch Stromausfall) muss die CCU Software neu gestartet werden: Die CCU versucht zwar alle 500 ms die alte Verbindung fortzusetzen, nach einem Neustart ist aber auch das Funkmodul zurückgesetzt und muss von der CCU neu initialisiert werden. Die Firmware erkennt diesen Fall und meldet ihn:
+* WebUI: Hinweis auf der Statusseite
+* API: `ccu.restartRequired: true`
+* MQTT / Home Assistant: Binärsensor "CCU restart required"
+
+Beispiel für eine Home Assistant Automation, die OpenCCU als App (Add-on) dann neu startet (Entität und App Slug anpassen):
+
+```yaml
+alias: OpenCCU neu starten wenn HB-RF-ETH es verlangt
+mode: single
+triggers:
+  - trigger: state
+    entity_id: binary_sensor.hb_rf_eth_xxxxxx_ccu_restart_required
+    to: "on"
+    for: "00:00:30"
+actions:
+  - action: hassio.addon_restart
+    data:
+      addon: xxxxxxxx_openccu
+  - delay: "00:10:00"
+```
+
+### Netzwerk-Watchdog
+Optional (Standard aus). Startet die Platine neu, wenn Netzwerkverbindung, IP Adresse oder die Antwort des Gateways auf Ping für die eingestellte Zeit (Standard 10 Minuten) fehlen. Jeder weitere Neustart ohne zwischenzeitlich funktionierendes Netzwerk wartet doppelt so lange (höchstens 24 Stunden). Das Gateway muss auf Ping antworten. Zusätzlich startet die Firmware neu, wenn ein Task hängt (Task Watchdog, 5 Sekunden). Der Grund des letzten Neustarts wird in WebUI, API und MQTT angezeigt.
 
 ### Bekannte Einschränkungen
-* Nach einem Neustart der Platine (z.B. bei Stromausfall) findet kein automatischer Reconnect statt, in diesem Fall muss die CCU Software daher neu gestartet werden.
+* Nach einem Neustart der Platine (z.B. bei Stromausfall) muss die CCU Software neu gestartet werden, siehe "Neustart und CCU Reconnect".
 * Die Stromversorgung mittels des Funkmoduls RPI-RF-MOD darf nur erfolgen, wenn keine andere Stromversorgung (USB oder PoE) angeschlossen ist.
 
 ### Werksreset
@@ -113,7 +184,13 @@ Siehe Hilfe zum RPI-RF-MOD
 * Dauerhaftes Leuchten der grünen Power LED: Sytem ist gestartet
 
 ### Firmware Updates
-Firmware Updates sind fertig kompiliert und Releases zu finden und können per Webinterface eingespielt werden. Zum Übernehmen der Firmware muss die Platine neu gestartet werden (mittel Power-On Reset).
+Die Firmware prüft regelmäßig (Standard alle 8 Stunden) das neueste Release eines GitHub Repositories (Einstellungen → Update Quelle, Standard `alexreinert/HB-RF-ETH`, z.B. auf einen Fork änderbar). Ist eine neuere Version vorhanden, kann sie unter "Firmware" oder per MQTT / Home Assistant installiert werden; optional auch automatisch. Die Firmware wird per HTTPS geladen, mit der von GitHub angegebenen SHA-256 Prüfsumme verglichen (falls vorhanden), in den freien Firmware Slot geschrieben und die Platine startet neu.
+
+Kommt die neue Firmware nach dem Update nicht innerhalb von 3 Minuten ins Netzwerk oder stürzt sie beim Start ab, schaltet der Bootloader automatisch auf die vorherige Firmware zurück.
+
+Alternativ kann eine `.bin` Datei aus den Releases über die WebUI hochgeladen werden, danach "Jetzt neu starten".
+
+Releases dieses Forks werden von GitHub Actions gebaut, sobald ein Tag `v<version>` (gleich `version.txt`) gepusht wird.
 
 ### Einbindung in piVCCU3 und debmatic
 Die Unterstützung für die Platine HB-RF-ETH ist in piVCCU3 ab Version 3.51.6-41 und in debmatic ab Version 3.51.6-46 eingebaut. Die Installation der Platine erfolgt über das Paket "hb-rf-eth". Weiteres Details findet man in der Installationsanleitung von piVCCU3 bzw. debmatic.

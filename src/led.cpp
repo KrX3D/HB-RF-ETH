@@ -57,13 +57,29 @@ void LED::start(Settings *settings)
         .clk_cfg = LEDC_AUTO_CLK,
     };
 
-    _highDuty = settings->getLEDBrightness() * (1 << ledc_timer.duty_resolution) / 100;
+    setBrightness(settings->getLEDBrightness());
 
     ledc_timer_config(&ledc_timer);
 
     if (!_switchTaskHandle)
     {
         xTaskCreate(ledSwitcherTask, "LED_Switcher", 4096, NULL, 10, &_switchTaskHandle);
+    }
+}
+
+void LED::setBrightness(int brightness)
+{
+    if (brightness < 0)
+        brightness = 0;
+    if (brightness > 100)
+        brightness = 100;
+    _highDuty = brightness * (1 << LEDC_TIMER_11_BIT) / 100;
+
+    for (uint8_t i = 0; i < MAX_LED_COUNT; i++)
+    {
+        if (_leds[i] == 0)
+            break;
+        _leds[i]->updatePinState();
     }
 }
 
