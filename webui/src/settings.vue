@@ -103,17 +103,16 @@
         </b-form-select>
       </b-form-group>
       <hr />
-      <b-form-group :label="$t('ledBrightness')" label-cols-sm="4">
+      <b-form-group :label="$t('ledBrightness')" label-cols-sm="4" :description="$t('ledBrightnessHint')">
         <b-input-group append="%">
-          <b-form-select v-model.number="ledBrightness">
-            <b-form-select-option :value="0">0</b-form-select-option>
-            <b-form-select-option :value="5">5</b-form-select-option>
-            <b-form-select-option :value="10">10</b-form-select-option>
-            <b-form-select-option :value="25">25</b-form-select-option>
-            <b-form-select-option :value="50">50</b-form-select-option>
-            <b-form-select-option :value="75">75</b-form-select-option>
-            <b-form-select-option :value="100">100</b-form-select-option>
-          </b-form-select>
+          <b-form-input
+            type="number"
+            v-model.number="$v.ledBrightness.$model"
+            min="0"
+            max="100"
+            step="5"
+            :state="validateState('ledBrightness')"
+          ></b-form-input>
         </b-input-group>
       </b-form-group>
       <hr />
@@ -193,6 +192,62 @@
           <b-form-radio :value="false">{{ $t('disabled') }}</b-form-radio>
         </b-form-radio-group>
       </b-form-group>
+      <b-form-group
+        :label="$t('mqttCommands')"
+        label-cols-sm="4"
+        v-if="mqttEnabled"
+        :description="$t('mqttCommandsHint')"
+      >
+        <b-form-radio-group buttons v-model="mqttCommands" required>
+          <b-form-radio :value="true">{{ $t('enabled') }}</b-form-radio>
+          <b-form-radio :value="false">{{ $t('disabled') }}</b-form-radio>
+        </b-form-radio-group>
+      </b-form-group>
+      <hr />
+      <b-form-group :label="$t('networkWatchdog')" label-cols-sm="4" :description="$t('networkWatchdogHint')">
+        <b-form-radio-group buttons v-model="networkWatchdog" required>
+          <b-form-radio :value="true">{{ $t('enabled') }}</b-form-radio>
+          <b-form-radio :value="false">{{ $t('disabled') }}</b-form-radio>
+        </b-form-radio-group>
+      </b-form-group>
+      <b-form-group :label="$t('networkWatchdogTimeout')" label-cols-sm="4" v-if="networkWatchdog">
+        <b-input-group :append="$t('minutes')">
+          <b-form-input
+            type="number"
+            v-model.number="$v.networkWatchdogTimeout.$model"
+            min="2"
+            max="1440"
+            :state="validateState('networkWatchdogTimeout')"
+          ></b-form-input>
+        </b-input-group>
+      </b-form-group>
+      <hr />
+      <b-form-group :label="$t('updateRepo')" label-cols-sm="4" :description="$t('updateRepoHint')">
+        <b-form-input
+          type="text"
+          v-model="$v.updateRepo.$model"
+          trim
+          placeholder="alexreinert/HB-RF-ETH"
+          :state="validateState('updateRepo')"
+        ></b-form-input>
+      </b-form-group>
+      <b-form-group :label="$t('updateInterval')" label-cols-sm="4">
+        <b-input-group :append="$t('hours')">
+          <b-form-input
+            type="number"
+            v-model.number="$v.updateInterval.$model"
+            min="1"
+            max="168"
+            :state="validateState('updateInterval')"
+          ></b-form-input>
+        </b-input-group>
+      </b-form-group>
+      <b-form-group :label="$t('updateAuto')" label-cols-sm="4" :description="$t('updateAutoHint')">
+        <b-form-radio-group buttons v-model="updateAuto" required>
+          <b-form-radio :value="true">{{ $t('enabled') }}</b-form-radio>
+          <b-form-radio :value="false">{{ $t('disabled') }}</b-form-radio>
+        </b-form-radio-group>
+      </b-form-group>
 
       <b-alert
         variant="success"
@@ -201,6 +256,16 @@
         fade
         @dismissed="showSuccess=null"
       >{{ $t("saveSuccess") }}</b-alert>
+      <b-alert variant="warning" :show="$store.state.settings.restartRequired">
+        {{ $t("restartRequired") }}
+        <b-button
+          size="sm"
+          variant="warning"
+          class="ml-2"
+          :disabled="$store.state.system.restarting"
+          @click="restartClick"
+        >{{ $t("restartNow") }}</b-button>
+      </b-alert>
       <b-alert
         variant="danger"
         :show="showError"
@@ -241,6 +306,7 @@ import {
 } from "vuelidate/lib/validators";
 
 const hostname = helpers.regex('hostname', /^[a-zA-Z0-9_-]{1,63}$/)
+const githubRepo = helpers.regex('githubRepo', /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/)
 const mqttTopic = helpers.regex('mqttTopic', /^[^#+\s]*$/)
 const domainname = helpers.regex('domainname', /^([a-zA-Z0-9_-]{1,63}\.)*[a-zA-Z0-9_-]{1,63}$/)
 
@@ -304,6 +370,12 @@ export default {
       mqttTopicPrefix: "",
       mqttInterval: 60,
       mqttHaDiscovery: true,
+      mqttCommands: true,
+      networkWatchdog: false,
+      networkWatchdogTimeout: 10,
+      updateRepo: "",
+      updateInterval: 8,
+      updateAuto: false,
 
       showSuccess: null,
       showError: null
@@ -423,6 +495,26 @@ export default {
       required: requiredIf("mqttEnabled"),
       integer,
       between: between(5, 3600)
+    },
+    ledBrightness: {
+      required,
+      integer,
+      between: between(0, 100)
+    },
+    networkWatchdogTimeout: {
+      required: requiredIf("networkWatchdog"),
+      integer,
+      between: between(2, 1440)
+    },
+    updateRepo: {
+      required,
+      githubRepo,
+      maxLength: maxLength(64)
+    },
+    updateInterval: {
+      required,
+      integer,
+      between: between(1, 168)
     }
   },
   mounted() {
@@ -438,6 +530,19 @@ export default {
       this.mqttTopicPrefix = value.mqttTopicPrefix;
       this.mqttInterval = value.mqttInterval;
       this.mqttHaDiscovery = value.mqttHaDiscovery;
+      this.mqttCommands = value.mqttCommands;
+      this.networkWatchdog = value.networkWatchdog;
+      this.networkWatchdogTimeout = value.networkWatchdogTimeout;
+      this.updateRepo = value.updateRepo;
+      this.updateInterval = value.updateInterval;
+      this.updateAuto = value.updateAuto;
+    },
+    restartClick() {
+      if (window.confirm(this.$t("restartConfirm"))) {
+        this.$store.dispatch("system/restart").catch(() => {
+          this.showError = true;
+        });
+      }
     },
     validateState(name) {
       const { $dirty, $error } = this.$v[name];
@@ -474,7 +579,13 @@ export default {
           mqttPassword: self.mqttPassword,
           mqttTopicPrefix: self.mqttTopicPrefix,
           mqttInterval: self.mqttInterval,
-          mqttHaDiscovery: self.mqttHaDiscovery
+          mqttHaDiscovery: self.mqttHaDiscovery,
+          mqttCommands: self.mqttCommands,
+          networkWatchdog: self.networkWatchdog,
+          networkWatchdogTimeout: self.networkWatchdogTimeout,
+          updateRepo: self.updateRepo,
+          updateInterval: self.updateInterval,
+          updateAuto: self.updateAuto
         })
         .then(
           () => {
@@ -521,9 +632,26 @@ export default {
         mqttTopicPrefixHint: "Leer lassen für hb-rf-eth/<Seriennummer>.",
         mqttInterval: "Sendeintervall",
         mqttHaDiscovery: "Home Assistant Discovery",
+        mqttCommands: "MQTT Befehle",
+        mqttCommandsHint: "Neustart, LED Helligkeit, Netzwerk-Watchdog und Firmware Update über MQTT / Home Assistant steuern.",
+        ledBrightnessHint: "Wird sofort übernommen.",
+        networkWatchdog: "Netzwerk-Watchdog",
+        networkWatchdogHint:
+          "Startet die Platine neu, wenn Netzwerkverbindung, IP Adresse oder Gateway (Ping) für die eingestellte Zeit fehlen. Wiederholte Neustarts warten jeweils doppelt so lange (max. 24 Stunden).",
+        networkWatchdogTimeout: "Neustart nach",
+        minutes: "Minuten",
+        hours: "Stunden",
+        updateRepo: "Update Quelle (GitHub)",
+        updateRepoHint: "Repository im Format Besitzer/Name, z.B. alexreinert/HB-RF-ETH oder ein Fork.",
+        updateInterval: "Prüfintervall",
+        updateAuto: "Automatisch installieren",
+        updateAutoHint: "Installiert neuere Versionen ohne Rückfrage. Die Platine startet dabei neu.",
         save: "Speichern",
-        saveSuccess:
-          "Einstellungen wurden erfolgreich gespeichert. Bitte starten Sie das System neu um sie zu übernehmen.",
+        saveSuccess: "Einstellungen wurden erfolgreich gespeichert.",
+        restartRequired: "Einige Änderungen werden erst nach einem Neustart aktiv.",
+        restartNow: "Jetzt neu starten",
+        restartConfirm:
+          "HB-RF-ETH jetzt neu starten? Die Verbindung zur CCU wird dabei getrennt, die CCU Software muss danach neu gestartet werden.",
         saveError:
           "Beim Speichern der Einstellungen ist ein Fehler aufgetreten."
       },
@@ -558,9 +686,26 @@ export default {
         mqttTopicPrefixHint: "Leave empty for hb-rf-eth/<serial>.",
         mqttInterval: "Publish interval",
         mqttHaDiscovery: "Home Assistant discovery",
+        mqttCommands: "MQTT commands",
+        mqttCommandsHint: "Control restart, LED brightness, network watchdog and firmware update via MQTT / Home Assistant.",
+        ledBrightnessHint: "Applied immediately.",
+        networkWatchdog: "Network watchdog",
+        networkWatchdogHint:
+          "Restarts the board when the network link, IP address or gateway (ping) is missing for the configured time. Each repeated restart waits twice as long (max. 24 hours).",
+        networkWatchdogTimeout: "Restart after",
+        minutes: "minutes",
+        hours: "hours",
+        updateRepo: "Update source (GitHub)",
+        updateRepoHint: "Repository as owner/name, e.g. alexreinert/HB-RF-ETH or a fork.",
+        updateInterval: "Check interval",
+        updateAuto: "Install automatically",
+        updateAutoHint: "Installs newer versions without asking. The board restarts.",
         save: "Save",
-        saveSuccess:
-          "Settings were successfully saved. Please restart to take them effect.",
+        saveSuccess: "Settings were successfully saved.",
+        restartRequired: "Some changes only take effect after a restart.",
+        restartNow: "Restart now",
+        restartConfirm:
+          "Restart the HB-RF-ETH now? This drops the connection to the CCU, the CCU software has to be restarted afterwards.",
         saveError: "An error occured while saving the settings."
       }
     }

@@ -75,7 +75,9 @@ const moduleSysInfo = {
     radioModuleSerial: "",
     radioModuleBidCosRadioMAC: "",
     radioModuleHmIPRadioMAC: "",
-    radioModuleSGTIN: ""
+    radioModuleSGTIN: "",
+    ccuRestartRequired: false,
+    resetReason: ""
   }),
   mutations: {
     sysInfo(state, newState) {
@@ -90,6 +92,8 @@ const moduleSysInfo = {
       state.radioModuleBidCosRadioMAC = newState.radioModuleBidCosRadioMAC;
       state.radioModuleHmIPRadioMAC = newState.radioModuleHmIPRadioMAC;
       state.radioModuleSGTIN = newState.radioModuleSGTIN;
+      state.ccuRestartRequired = newState.ccuRestartRequired;
+      state.resetReason = newState.resetReason;
     },
   },
   actions: {
@@ -134,6 +138,13 @@ const moduleSettings = {
     mqttTopicPrefix: "",
     mqttInterval: 60,
     mqttHaDiscovery: true,
+    mqttCommands: true,
+    networkWatchdog: false,
+    networkWatchdogTimeout: 10,
+    updateRepo: "alexreinert/HB-RF-ETH",
+    updateInterval: 8,
+    updateAuto: false,
+    restartRequired: false,
   }),
   mutations: {
     settings(state, value) {
@@ -157,6 +168,15 @@ const moduleSettings = {
       state.mqttTopicPrefix = value.mqttTopicPrefix;
       state.mqttInterval = value.mqttInterval;
       state.mqttHaDiscovery = value.mqttHaDiscovery;
+      state.mqttCommands = value.mqttCommands;
+      state.networkWatchdog = value.networkWatchdog;
+      state.networkWatchdogTimeout = value.networkWatchdogTimeout;
+      state.updateRepo = value.updateRepo;
+      state.updateInterval = value.updateInterval;
+      state.updateAuto = value.updateAuto;
+    },
+    restartRequired(state, value) {
+      state.restartRequired = value;
     },
   },
   actions: {
@@ -179,9 +199,77 @@ const moduleSettings = {
           .then(
             response => {
               context.commit("settings", response.data.settings);
+              if (response.data.restartRequired) {
+                context.commit("restartRequired", true);
+              }
               resolve();
             },
             () => { reject(); });
+      });
+    }
+  }
+};
+
+const moduleSystem = {
+  namespaced: true,
+  state: () => ({
+    restarting: false,
+  }),
+  mutations: {
+    restarting(state, value) {
+      state.restarting = value;
+    },
+  },
+  actions: {
+    // restarts the board and reloads the page once it answers again
+    restart(context) {
+      context.commit("restarting", true);
+      return Axios.post("/api/restart").then(() => {
+        var waitUntilBack = () => {
+          setTimeout(() => {
+            Axios.get("/sysinfo.json", { timeout: 2000 }).then(
+              () => { window.location.reload(); },
+              () => { waitUntilBack(); });
+          }, 3000);
+        };
+        waitUntilBack();
+      }, (err) => {
+        context.commit("restarting", false);
+        return Promise.reject(err);
+      });
+    }
+  }
+};
+
+const moduleOnlineUpdate = {
+  namespaced: true,
+  state: () => ({
+    state: "idle",
+    repo: "",
+    installedVersion: "",
+    latestVersion: "",
+    available: false,
+    installable: false,
+    releaseUrl: "",
+    progress: 0,
+    error: "",
+  }),
+  mutations: {
+    update(state, value) {
+      Object.assign(state, value);
+    },
+  },
+  actions: {
+    load(context) {
+      return Axios.get("/api/update").then(response => context.commit("update", response.data.update));
+    },
+    check(context) {
+      return Axios.post("/api/update/check").then(response => context.commit("update", response.data.update));
+    },
+    install(context, force) {
+      return Axios.post("/api/update/install", { force: !!force }).then(response => {
+        context.commit("update", response.data.update);
+        return response.data.accepted;
       });
     }
   }
@@ -236,6 +324,8 @@ const store = new Vuex.Store({
     sysInfo: moduleSysInfo,
     settings: moduleSettings,
     firmwareUpdate: moduleFirmwareUpdate,
+    system: moduleSystem,
+    onlineUpdate: moduleOnlineUpdate,
   }
 });
 
@@ -277,7 +367,7 @@ Axios.interceptors.request.use(
 Axios.interceptors.response.use(
   response => { return response; },
   error => {
-    if (error.response.status == 401) {
+    if (error.response && error.response.status == 401) {
       store.dispatch("login/logout");
       router.go();
     }
