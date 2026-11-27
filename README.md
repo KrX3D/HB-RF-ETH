@@ -190,6 +190,8 @@ Kommt die neue Firmware nach dem Update nicht innerhalb von 3 Minuten ins Netzwe
 
 Alternativ kann eine `.bin` Datei aus den Releases über die WebUI hochgeladen werden, danach "Jetzt neu starten".
 
+Test-Builds: Jeder Pull Request bekommt einen Kommentar mit einem Link auf die gebaute `firmware_*.bin` (GitHub Login nötig, 90 Tage gültig). Builds von Branches stehen in der Zusammenfassung des jeweiligen Actions Laufs.
+
 Releases dieses Forks werden von GitHub Actions gebaut, sobald ein Tag `v<version>` (gleich `version.txt`) gepusht wird.
 
 ### Einbindung in piVCCU3 und debmatic
