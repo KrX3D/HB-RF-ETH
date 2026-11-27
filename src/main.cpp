@@ -43,8 +43,12 @@
 #include "updatecheck.h"
 #include "devicestatus.h"
 #include "mqttpublisher.h"
+#include "systemcontrol.h"
+#include "networkwatchdog.h"
 
 static const char *TAG = "HB-RF-ETH";
+
+static Ethernet *_ethernet = NULL;
 
 extern "C"
 {
@@ -63,6 +67,8 @@ void app_main()
         .source_clk = UART_SCLK_APB};
     uart_param_config(UART_NUM_0, &uart_config);
     uart_set_pin(UART_NUM_0, GPIO_NUM_1, GPIO_NUM_3, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+
+    SystemControl::init();
 
     Settings settings;
 
@@ -162,7 +168,7 @@ void app_main()
     RawUartUdpListener rawUartUdpLister(&radioModuleConnector);
     rawUartUdpLister.start();
 
-    UpdateCheck updateCheck(&sysInfo, &statusLED);
+    UpdateCheck updateCheck(&settings, &sysInfo, &statusLED);
     updateCheck.start();
 
     DeviceStatus deviceStatus(&settings, &sysInfo, &updateCheck, &ethernet, &rawUartUdpLister, &radioModuleDetector);
@@ -170,13 +176,17 @@ void app_main()
     WebUI webUI(&settings, &statusLED, &sysInfo, &updateCheck, &ethernet, &rawUartUdpLister, &radioModuleConnector, &radioModuleDetector, &deviceStatus);
     webUI.start();
 
-    MqttPublisher mqttPublisher(&settings, &deviceStatus);
+    MqttPublisher mqttPublisher(&settings, &deviceStatus, &updateCheck);
     mqttPublisher.start();
 
     powerLED.setState(LED_STATE_ON);
     statusLED.setState(LED_STATE_OFF);
 
-    esp_ota_mark_app_valid_cancel_rollback();
+    NetworkWatchdog networkWatchdog(&settings, &ethernet);
+    networkWatchdog.start();
+
+    _ethernet = &ethernet;
+    SystemControl::confirmFirmware([]() { return _ethernet->isConnected(); });
 
     vTaskSuspend(NULL);
 }

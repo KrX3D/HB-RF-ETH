@@ -46,6 +46,8 @@ private:
 public:
     static void start(Settings *settings);
     static void stop();
+    // Applies a new brightness (0-100 %) to all LEDs immediately
+    static void setBrightness(int brightness);
 
     LED(gpio_num_t pin);
     void setState(led_state_t state);

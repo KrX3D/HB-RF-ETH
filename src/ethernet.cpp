@@ -100,6 +100,11 @@ void Ethernet::stop()
     ESP_ERROR_CHECK_WITHOUT_ABORT(esp_eth_stop(_eth_handle));
 }
 
+bool Ethernet::isConnected()
+{
+    return _isConnected;
+}
+
 void Ethernet::getNetworkSettings(ip4_addr_t *ip, ip4_addr_t *netmask, ip4_addr_t *gateway, ip4_addr_t *dns1, ip4_addr_t *dns2)
 {
     if (_isConnected)

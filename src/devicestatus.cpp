@@ -22,6 +22,7 @@
 #include <stdio.h>
 #include "esp_timer.h"
 #include "lwip/ip4_addr.h"
+#include "systemcontrol.h"
 
 static double round2(double value)
 {
@@ -93,6 +94,11 @@ uint32_t DeviceStatus::getCcuAddress()
     return _rawUartUdpListener->getConnectedRemoteAddress().addr;
 }
 
+bool DeviceStatus::isCcuRestartRequired()
+{
+    return _rawUartUdpListener->isCcuRestartRequired();
+}
+
 const char *DeviceStatus::getSerialNumber()
 {
     return _sysInfo->getSerialNumber();
@@ -122,6 +128,7 @@ cJSON *DeviceStatus::toJson()
     cJSON_AddNumberToObject(device, "uptime", (double)(esp_timer_get_time() / 1000000LL));
     cJSON_AddNumberToObject(device, "cpuUsage", round2(_sysInfo->getCpuUsage()));
     cJSON_AddNumberToObject(device, "memoryUsage", round2(_sysInfo->getMemoryUsage()));
+    cJSON_AddStringToObject(device, "resetReason", SystemControl::getResetReason());
 
     ip4_addr_t ip, netmask, gateway, dns1, dns2;
     _ethernet->getNetworkSettings(&ip, &netmask, &gateway, &dns1, &dns2);
@@ -133,6 +140,7 @@ cJSON *DeviceStatus::toJson()
     formatIP(ccuAddress, buf, sizeof(buf));
     cJSON_AddBoolToObject(ccu, "connected", buf[0] != 0);
     cJSON_AddStringToObject(ccu, "address", buf);
+    cJSON_AddBoolToObject(ccu, "restartRequired", isCcuRestartRequired());
 
     cJSON *radio = cJSON_AddObjectToObject(root, "radioModule");
     radio_module_type_t type = _radioModuleDetector->getRadioModuleType();
@@ -154,6 +162,13 @@ cJSON *DeviceStatus::toJson()
         buf[0] = 0;
     }
     cJSON_AddStringToObject(radio, "firmwareVersion", buf);
+
+    _updateCheck->addToJson(root);
+
+    cJSON *settings = cJSON_AddObjectToObject(root, "settings");
+    cJSON_AddNumberToObject(settings, "ledBrightness", _settings->getLEDBrightness());
+    cJSON_AddBoolToObject(settings, "networkWatchdog", _settings->getNetworkWatchdogEnabled());
+    cJSON_AddNumberToObject(settings, "networkWatchdogTimeout", _settings->getNetworkWatchdogTimeout());
 
     return root;
 }
