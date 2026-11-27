@@ -1,0 +1,155 @@
+/* Dark theme (GitHub-like blue-black) on top of Bootstrap 4.
+   Active when <html data-theme="dark">, see theme.js.
+   Several Bootstrap utility classes (.bg-light, .bg-secondary, .text-dark)
+   use !important, so the overrides for them need it as well. */
+
+html[data-theme="dark"] {
+  --hb-bg: #0d1117;
+  --hb-card: #161b22;
+  --hb-head: #21262d;
+  --hb-input: #0d1117;
+  --hb-disabled: #21262d;
+  --hb-fg: #e6edf3;
+  --hb-muted: #8b949e;
+  --hb-fg-disabled: #c9d1d9;
+  --hb-border: #30363d;
+  --hb-link: #58a6ff;
+  color-scheme: dark;
+}
+
+html[data-theme="dark"],
+html[data-theme="dark"] body,
+html[data-theme="dark"] .bg-light {
+  background-color: var(--hb-bg) !important;
+  color: var(--hb-fg);
+}
+
+html[data-theme="dark"] a:not(.btn):not(.nav-link):not(.navbar-brand) {
+  color: var(--hb-link);
+}
+
+html[data-theme="dark"] hr {
+  border-color: var(--hb-border);
+}
+
+html[data-theme="dark"] .text-muted,
+html[data-theme="dark"] .form-text {
+  color: var(--hb-muted) !important;
+}
+
+/* Navbar */
+html[data-theme="dark"] .navbar.bg-primary {
+  background-color: var(--hb-card) !important;
+  border: 1px solid var(--hb-border);
+}
+
+html[data-theme="dark"] .navbar-brand {
+  color: var(--hb-link) !important;
+}
+
+/* Cards */
+html[data-theme="dark"] .card {
+  background-color: var(--hb-card);
+  border-color: var(--hb-border);
+}
+
+html[data-theme="dark"] .card-header {
+  background-color: var(--hb-head) !important;
+  border-color: var(--hb-border);
+}
+
+/* Forms */
+html[data-theme="dark"] .form-control,
+html[data-theme="dark"] .custom-select,
+html[data-theme="dark"] .custom-file-label {
+  background-color: var(--hb-input);
+  color: var(--hb-fg);
+  border-color: var(--hb-border);
+}
+
+html[data-theme="dark"] .form-control:focus,
+html[data-theme="dark"] .custom-select:focus {
+  background-color: var(--hb-input);
+  color: var(--hb-fg);
+}
+
+html[data-theme="dark"] .form-control::placeholder {
+  color: var(--hb-muted);
+}
+
+html[data-theme="dark"] .form-control:disabled,
+html[data-theme="dark"] .form-control[readonly] {
+  background-color: var(--hb-disabled);
+  color: var(--hb-fg-disabled);
+}
+
+html[data-theme="dark"] .input-group-text,
+html[data-theme="dark"] .custom-file-label::after {
+  background-color: var(--hb-disabled);
+  color: var(--hb-fg);
+  border-color: var(--hb-border);
+}
+
+/* Radio button groups (b-form-radio-group buttons) */
+html[data-theme="dark"] .btn-secondary {
+  background-color: #30363d;
+  border-color: #30363d;
+}
+
+html[data-theme="dark"] .btn-secondary:not(:disabled):not(.disabled).active,
+html[data-theme="dark"] .btn-secondary:not(:disabled):not(.disabled):active {
+  background-color: #1f6feb;
+  border-color: #1f6feb;
+}
+
+html[data-theme="dark"] .btn-outline-secondary {
+  color: var(--hb-fg);
+  border-color: var(--hb-border);
+}
+
+/* Progress bars: the label sits on the dark track, keep it readable */
+html[data-theme="dark"] .progress {
+  background-color: var(--hb-disabled);
+}
+
+html[data-theme="dark"] .progress .text-dark {
+  color: #fff !important;
+}
+
+/* List group (about page) */
+html[data-theme="dark"] .list-group-item {
+  background-color: var(--hb-card);
+  border-color: var(--hb-border);
+  color: var(--hb-fg);
+}
+
+/* Alerts */
+html[data-theme="dark"] .alert-warning {
+  background-color: #3d3215;
+  color: #f3d27a;
+  border-color: #5c4a1a;
+}
+
+html[data-theme="dark"] .alert-success {
+  background-color: #173d24;
+  color: #8fd6a5;
+  border-color: #1f5a33;
+}
+
+html[data-theme="dark"] .alert-danger {
+  background-color: #3d1a1d;
+  color: #f2a7ab;
+  border-color: #5c2328;
+}
+
+html[data-theme="dark"] .alert-info {
+  background-color: #132f4c;
+  color: #9ccaf5;
+  border-color: #1d4570;
+}
+
+/* Theme toggle button in the header */
+.theme-toggle {
+  min-width: 2rem;
+  line-height: 1.25;
+}

@@ -10,6 +10,9 @@ import Axios from 'axios'
 
 import 'bootstrap/dist/css/bootstrap.css'
 import 'bootstrap-vue/dist/bootstrap-vue.css'
+import './theme.css'
+
+import { moduleTheme, initTheme } from './theme.js'
 
 import App from './app.vue'
 import Home from './home.vue'
@@ -321,6 +324,7 @@ const moduleFirmwareUpdate = {
 const store = new Vuex.Store({
   modules: {
     login: moduleLogin,
+    theme: moduleTheme,
     sysInfo: moduleSysInfo,
     settings: moduleSettings,
     firmwareUpdate: moduleFirmwareUpdate,
@@ -375,6 +379,8 @@ Axios.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+initTheme(store);
 
 new Vue({
   el: '#app',
