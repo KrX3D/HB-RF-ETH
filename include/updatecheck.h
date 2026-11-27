@@ -61,6 +61,7 @@ private:
 
     void setState(update_state_t state, const char *error = NULL);
     void check();
+    void reportToAuthor();
     void install(bool force);
     bool download(const char *url, const char *sha256, int expectedSize);
 

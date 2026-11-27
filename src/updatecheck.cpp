@@ -26,6 +26,7 @@
 #include "esp_timer.h"
 #include "mbedtls/sha256.h"
 #include <string.h>
+#include <strings.h>
 #include <limits.h>
 
 static const char *TAG = "UpdateCheck";
@@ -191,10 +192,43 @@ static int readHttp(void *ctx, char *buf, int len)
     return esp_http_client_read((esp_http_client_handle_t)ctx, buf, len);
 }
 
+// Same request as firmware 1.3.0: tells the original author's server which
+// board, serial and version is running (his usage statistics). Only done while
+// the update source is the original repository; the answer is not used, the
+// firmware itself comes from the GitHub release.
+void UpdateCheck::reportToAuthor()
+{
+    char url[160];
+    snprintf(url, sizeof(url), "https://www.debmatic.de/hb-rf-eth/latestVersion.json?board=%d&serial=%s&version=%s",
+             _sysInfo->getBoardType(), _sysInfo->getSerialNumber(), _sysInfo->getCurrentVersion());
+
+    esp_http_client_config_t config = {};
+    config.url = url;
+    config.cert_pem = github_ca_pem; // Let's Encrypt, ISRG Root X1 is in the bundle
+    config.timeout_ms = 10000;
+    config.user_agent = "HB-RF-ETH";
+
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+    if (client == NULL)
+        return;
+
+    esp_err_t err = esp_http_client_perform(client);
+    if (err == ESP_OK)
+        ESP_LOGI(TAG, "Reported version to debmatic.de (HTTP %d)", esp_http_client_get_status_code(client));
+    else
+        ESP_LOGW(TAG, "Could not report version to debmatic.de: %s", esp_err_to_name(err));
+
+    esp_http_client_cleanup(client);
+}
+
 void UpdateCheck::check()
 {
     char url[160];
     char error[64];
+
+    // one TLS session at a time, the heap is small
+    if (strcasecmp(_settings->getUpdateRepo(), "alexreinert/HB-RF-ETH") == 0)
+        reportToAuthor();
     snprintf(url, sizeof(url), "https://api.github.com/repos/%s/releases/latest", _settings->getUpdateRepo());
 
     ESP_LOGI(TAG, "Checking %s", url);

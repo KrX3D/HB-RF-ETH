@@ -223,13 +223,24 @@
         </b-input-group>
       </b-form-group>
       <hr />
-      <b-form-group :label="$t('updateRepo')" label-cols-sm="4" :description="$t('updateRepoHint')">
+      <b-form-group
+        :label="$t('updateRepo')"
+        label-cols-sm="4"
+        :description="updateSource == 'original' ? $t('updateRepoOriginalHint') : $t('updateRepoHint')"
+      >
+        <b-form-select v-model="updateSource" @change="updateSourceChanged">
+          <b-form-select-option value="original">{{ $t('updateRepoOriginal') }} ({{ originalRepo }})</b-form-select-option>
+          <b-form-select-option value="custom">{{ $t('updateRepoCustom') }}</b-form-select-option>
+        </b-form-select>
         <b-form-input
+          v-if="updateSource == 'custom'"
+          class="mt-2"
           type="text"
           v-model="$v.updateRepo.$model"
           trim
-          placeholder="alexreinert/HB-RF-ETH"
+          placeholder="KrX3D/HB-RF-ETH"
           :state="validateState('updateRepo')"
+          @input="rememberCustomRepo"
         ></b-form-input>
       </b-form-group>
       <b-form-group :label="$t('updateInterval')" label-cols-sm="4">
@@ -332,6 +343,9 @@ Vue.use(FormRadioPlugin);
 import { FormSelectPlugin } from "bootstrap-vue/esm/components/form-select";
 Vue.use(FormSelectPlugin);
 
+const ORIGINAL_REPO = "alexreinert/HB-RF-ETH";
+const CUSTOM_REPO_KEY = "hb-rf-eth-custom-repo";
+
 import { InputGroupPlugin } from "bootstrap-vue/esm/components/input-group";
 Vue.use(InputGroupPlugin);
 
@@ -375,6 +389,8 @@ export default {
       networkWatchdog: false,
       networkWatchdogTimeout: 10,
       updateRepo: "",
+      updateSource: "original",
+      originalRepo: ORIGINAL_REPO,
       updateInterval: 8,
       updateAuto: false,
 
@@ -522,6 +538,19 @@ export default {
     this.$store.dispatch("settings/load");
   },
   methods: {
+    // the original repository is always in the list; the last own repository
+    // is kept in the browser so switching back and forth does not lose it
+    updateSourceChanged(source) {
+      if (source == "original") {
+        this.updateRepo = ORIGINAL_REPO;
+      } else {
+        this.updateRepo = localStorage.getItem(CUSTOM_REPO_KEY) || "";
+        this.$v.updateRepo.$touch();
+      }
+    },
+    rememberCustomRepo(value) {
+      if (value) localStorage.setItem(CUSTOM_REPO_KEY, value);
+    },
     applyMqttSettings(value) {
       this.mqttEnabled = value.mqttEnabled;
       this.mqttServer = value.mqttServer;
@@ -535,6 +564,7 @@ export default {
       this.networkWatchdog = value.networkWatchdog;
       this.networkWatchdogTimeout = value.networkWatchdogTimeout;
       this.updateRepo = value.updateRepo;
+      this.updateSource = (value.updateRepo || "").toLowerCase() == ORIGINAL_REPO.toLowerCase() ? "original" : "custom";
       this.updateInterval = value.updateInterval;
       this.updateAuto = value.updateAuto;
     },
@@ -646,7 +676,10 @@ export default {
         minutes: "Minuten",
         hours: "Stunden",
         updateRepo: "Update Quelle (GitHub)",
-        updateRepoHint: "Repository im Format Besitzer/Name, z.B. alexreinert/HB-RF-ETH oder ein Fork.",
+        updateRepoOriginal: "Original",
+        updateRepoCustom: "Eigenes Repository...",
+        updateRepoHint: "GitHub Repository im Format Besitzer/Name, z.B. ein Fork.",
+        updateRepoOriginalHint: "Wie bisher werden Board, Seriennummer und Version an debmatic.de gemeldet.",
         updateInterval: "Prüfintervall",
         updateAuto: "Automatisch installieren",
         updateAutoHint: "Installiert neuere Versionen ohne Rückfrage. Die Platine startet dabei neu.",
@@ -700,7 +733,10 @@ export default {
         minutes: "minutes",
         hours: "hours",
         updateRepo: "Update source (GitHub)",
-        updateRepoHint: "Repository as owner/name, e.g. alexreinert/HB-RF-ETH or a fork.",
+        updateRepoOriginal: "Original",
+        updateRepoCustom: "Own repository...",
+        updateRepoHint: "GitHub repository as owner/name, e.g. a fork.",
+        updateRepoOriginalHint: "As before, board, serial number and version are reported to debmatic.de.",
         updateInterval: "Check interval",
         updateAuto: "Install automatically",
         updateAutoHint: "Installs newer versions without asking. The board restarts.",
