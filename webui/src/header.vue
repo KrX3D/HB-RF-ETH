@@ -9,16 +9,26 @@
         <b-nav-item href="/firmware">{{ $t('firmware') }}</b-nav-item>
         <b-nav-item href="/about">{{ $t('about') }}</b-nav-item>
       </b-navbar-nav>
-      <b-navbar-nav v-if="$store.state.login.isLoggedIn" class="ml-auto">
+      <b-navbar-nav class="ml-auto">
         <b-nav-form form-class="flex-nowrap">
           <b-button
             size="sm"
             variant="outline-light"
-            class="mr-2"
-            :disabled="$store.state.system.restarting"
-            @click.prevent="restart"
-          >{{ $store.state.system.restarting ? $t('restarting') : $t('restart') }}</b-button>
-          <b-button size="sm" variant="outline-light" @click.prevent="logout">{{ $t('logout') }}</b-button>
+            class="theme-toggle"
+            :title="themeTitle"
+            :aria-label="themeTitle"
+            @click.prevent="$store.dispatch('theme/cycle')"
+          >{{ themeIcon }}</b-button>
+          <template v-if="$store.state.login.isLoggedIn">
+            <b-button
+              size="sm"
+              variant="outline-light"
+              class="ml-2"
+              :disabled="$store.state.system.restarting"
+              @click.prevent="restart"
+            >{{ $store.state.system.restarting ? $t('restarting') : $t('restart') }}</b-button>
+            <b-button size="sm" variant="outline-light" class="ml-2" @click.prevent="logout">{{ $t('logout') }}</b-button>
+          </template>
         </b-nav-form>
       </b-navbar-nav>
     </b-collapse>
@@ -36,6 +46,15 @@ Vue.use(CollapsePlugin);
 
 export default {
   name: "Header",
+  computed: {
+    themeIcon() {
+      // U+FE0E forces text instead of emoji glyphs
+      return { light: "\u2600\uFE0E", dark: "\u263E\uFE0E", system: "\u25D0\uFE0E" }[this.$store.state.theme.mode];
+    },
+    themeTitle() {
+      return this.$t("theme") + ": " + this.$t("theme_" + this.$store.state.theme.mode);
+    }
+  },
   methods: {
     restart() {
       if (window.confirm(this.$t("restartConfirm"))) {
@@ -62,6 +81,10 @@ export default {
         restartConfirm:
           "HB-RF-ETH jetzt neu starten? Die Verbindung zur CCU wird dabei getrennt, die CCU Software muss danach neu gestartet werden.",
         restartError: "Der Neustart konnte nicht ausgelöst werden.",
+        theme: "Darstellung",
+        theme_light: "Hell",
+        theme_dark: "Dunkel",
+        theme_system: "Wie System",
       },
       en: {
         home: "Home",
@@ -74,6 +97,10 @@ export default {
         restartConfirm:
           "Restart the HB-RF-ETH now? This drops the connection to the CCU, the CCU software has to be restarted afterwards.",
         restartError: "The restart could not be triggered.",
+        theme: "Theme",
+        theme_light: "Light",
+        theme_dark: "Dark",
+        theme_system: "Same as system",
       }
     }
   }

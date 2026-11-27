@@ -31,7 +31,7 @@ Hierbei gilt, dass bei einer debmatic oder piVCCU3 Installation immer nur ein Fu
     * Pin 3: Gnd
 * MDNS Server um Platine im Netzwerk bekannt zu machen
 * Netzwerkeinsellungen per DHCP oder statisch konfigurierbar
-* WebUI zur Konfiguration
+* WebUI zur Konfiguration (helles und dunkles Design, umschaltbar oben rechts: Hell / Dunkel / wie System)
   * Intialpasswort: admin
 * Firmware Update per Webinterface
 * Erkennung des Funkmoduls und Ausgabe von Typ, Seriennummer, Funkadresse und SGTIN in der WebUI
