@@ -58,7 +58,10 @@ jobs:
           path: .pio/build/hb-rf-eth/*.bin
 
       - name: Summary
-        run: echo "Firmware: [$(basename .pio/build/hb-rf-eth/firmware_*.bin)](${{ steps.firmware.outputs.artifact-url }}) (commit ${GITHUB_SHA::7})" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          URL: ${{ steps.firmware.outputs.artifact-url }}
+        run: |
+          echo "Firmware: [$(basename .pio/build/hb-rf-eth/firmware_*.bin)]($URL) (commit ${GITHUB_SHA::7})" >> "$GITHUB_STEP_SUMMARY"
 
       # One comment per PR, updated on every push, with the link to the .bin
       - name: Comment firmware link on PR
