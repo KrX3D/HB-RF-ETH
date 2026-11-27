@@ -158,6 +158,7 @@
           type="password"
           v-model="$v.mqttPassword.$model"
           autocomplete="new-password"
+          :placeholder="mqttPasswordSet ? '••••••••' : ''"
           :state="validateState('mqttPassword')"
         ></b-form-input>
       </b-form-group>
@@ -590,6 +591,9 @@ export default {
         .then(
           () => {
             self.showSuccess = true;
+            // stored now; the field shows the mask instead of the plain text
+            self.mqttPassword = "";
+            self.$v.mqttPassword.$reset();
           },
           () => {
             self.showError = true;

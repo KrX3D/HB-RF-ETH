@@ -18,6 +18,29 @@ static char *readFile(const char *path)
     return buf;
 }
 
+// serves a string in chunks of at most 1000 bytes, like esp_http_client_read
+struct Source
+{
+    const char *data;
+    size_t pos;
+    bool fail;
+};
+
+static int readSource(void *ctx, char *buf, int len)
+{
+    Source *src = (Source *)ctx;
+    if (src->fail)
+        return -1;
+    int n = (int)strlen(src->data + src->pos);
+    if (n > len)
+        n = len;
+    if (n > 1000)
+        n = 1000;
+    memcpy(buf, src->data + src->pos, n);
+    src->pos += n;
+    return n;
+}
+
 int main(int argc, char **argv)
 {
     // versions
@@ -37,6 +60,30 @@ int main(int argc, char **argv)
     assert(strstr(info.assetUrl, "firmware_1_3_0.bin") != NULL);
     assert(strstr(info.releaseUrl, "/releases/tag/") != NULL);
     assert(info.assetSize > 100000);
+
+    // reading the release JSON: buffer stays near the response size, the
+    // device ran out of memory with the old fixed 64 KB buffer
+    {
+        Source src = {json, 0, false};
+        char *out;
+        size_t length, capacity;
+        assert(readAllGrowing(readSource, &src, 2048, 32768, &out, &length, &capacity) == READ_ALL_OK);
+        assert(length == strlen(json) && strcmp(out, json) == 0);
+        assert(capacity <= 2 * 4096 && capacity < 64 * 1024);
+        free(out);
+
+        Source big = {json, 0, false};
+        assert(readAllGrowing(readSource, &big, 512, 1024, &out, &length, &capacity) == READ_ALL_TOO_LARGE);
+        assert(out == NULL);
+
+        Source broken = {json, 0, true};
+        assert(readAllGrowing(readSource, &broken, 512, 1024, &out, &length, &capacity) == READ_ALL_READ_ERROR);
+
+        Source empty = {"", 0, false};
+        assert(readAllGrowing(readSource, &empty, 16, 1024, &out, &length, &capacity) == READ_ALL_OK);
+        assert(length == 0 && out[0] == 0);
+        free(out);
+    }
     free(json);
 
     // digest, bootloader skipped, no leading v

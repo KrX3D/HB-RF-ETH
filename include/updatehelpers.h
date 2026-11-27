@@ -36,6 +36,67 @@ typedef struct
     int assetSize;          // size of the asset in bytes, 0 if unknown
 } release_info_t;
 
+typedef enum
+{
+    READ_ALL_OK = 0,
+    READ_ALL_NO_MEMORY,
+    READ_ALL_READ_ERROR,
+    READ_ALL_TOO_LARGE,
+} read_all_result_t;
+
+// Reads a response of unknown length into a zero terminated heap buffer that
+// starts small and doubles as needed (up to maxSize). A large fixed buffer
+// fails on the device while the TLS session holds most of the free heap.
+// readFn returns the number of bytes read, 0 at the end or <0 on error.
+// On success *out must be freed by the caller; *capacity is the final buffer size.
+static inline read_all_result_t readAllGrowing(int (*readFn)(void *ctx, char *buf, int len), void *ctx,
+                                               size_t initialSize, size_t maxSize,
+                                               char **out, size_t *length, size_t *capacity)
+{
+    size_t cap = initialSize, len = 0;
+    char *buf = (char *)malloc(cap);
+    *out = NULL;
+    if (buf == NULL)
+        return READ_ALL_NO_MEMORY;
+
+    for (;;)
+    {
+        if (len + 1 >= cap)
+        {
+            if (cap >= maxSize)
+            {
+                free(buf);
+                return READ_ALL_TOO_LARGE;
+            }
+            size_t newCap = cap * 2 > maxSize ? maxSize : cap * 2;
+            char *grown = (char *)realloc(buf, newCap);
+            if (grown == NULL)
+            {
+                free(buf);
+                return READ_ALL_NO_MEMORY;
+            }
+            buf = grown;
+            cap = newCap;
+        }
+
+        int read = readFn(ctx, buf + len, (int)(cap - 1 - len));
+        if (read < 0)
+        {
+            free(buf);
+            return READ_ALL_READ_ERROR;
+        }
+        if (read == 0)
+            break;
+        len += read;
+    }
+
+    buf[len] = 0;
+    *out = buf;
+    *length = len;
+    *capacity = cap;
+    return READ_ALL_OK;
+}
+
 // Compares two "major.minor.patch" versions, a leading "v" is ignored.
 // Returns <0 if a < b, 0 if equal and >0 if a > b.
 static inline int compareVersions(const char *a, const char *b)

@@ -6,7 +6,7 @@
     header-text-variant="white"
     class="mb-3"
   >
-    <b-form @submit.stop.prevent>
+    <b-form @submit.stop.prevent="loginClick">
       <b-form-group :label="$t('password')" label-cols-sm="4">
         <b-form-input
           type="password"
@@ -23,9 +23,9 @@
       >{{ $t('loginError') }}</b-alert>
       <b-form-group label-cols-sm="9">
         <b-button
+          type="submit"
           variant="primary"
           block
-          @click="loginClick"
           :disabled="password==null||password==''"
         >{{ $t('login') }}</b-button>
       </b-form-group>
@@ -82,7 +82,8 @@ export default {
       const { $dirty, $error } = this.$v[name];
       return $dirty && $error ? false : null;
     },
-    loginClick(event) {
+    loginClick() {
+      if (this.password == null || this.password == "") return;
       var self = this;
       this.showError = null;
       this.$store.dispatch("login/tryLogin", this.password).then(
