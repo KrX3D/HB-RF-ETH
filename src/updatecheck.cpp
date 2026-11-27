@@ -20,6 +20,7 @@
 #include "updatecheck.h"
 #include "systemcontrol.h"
 #include "esp_http_client.h"
+#include "esp_heap_caps.h"
 #include "esp_ota_ops.h"
 #include "esp_log.h"
 #include "esp_timer.h"
@@ -36,7 +37,7 @@ extern const char github_ca_pem[] asm("_binary_github_ca_pem_start");
 #define NOTIFY_INSTALL 2
 #define NOTIFY_INSTALL_FORCE 4
 
-#define MAX_RELEASE_JSON (64 * 1024)
+#define MAX_RELEASE_JSON (32 * 1024)
 
 static void _update_check_task_func(void *parameter)
 {
@@ -185,6 +186,11 @@ static int openFollowingRedirects(esp_http_client_handle_t client, int64_t *cont
     return -1;
 }
 
+static int readHttp(void *ctx, char *buf, int len)
+{
+    return esp_http_client_read((esp_http_client_handle_t)ctx, buf, len);
+}
+
 void UpdateCheck::check()
 {
     char url[160];
@@ -205,7 +211,6 @@ void UpdateCheck::check()
     int64_t contentLength = 0;
     int status = openFollowingRedirects(client, &contentLength);
     char *buffer = NULL;
-    int len = 0;
 
     if (status != 200)
     {
@@ -221,31 +226,25 @@ void UpdateCheck::check()
         goto cleanup;
     }
 
-    buffer = (char *)malloc(MAX_RELEASE_JSON);
-    if (buffer == NULL)
     {
-        setState(UPDATE_STATE_ERROR, "Out of memory");
-        goto cleanup;
-    }
-
-    while (len < MAX_RELEASE_JSON - 1)
-    {
-        int read = esp_http_client_read(client, buffer + len, MAX_RELEASE_JSON - 1 - len);
-        if (read < 0)
+        // GitHub sends ~4-5 KB; start small, grow if needed
+        size_t capacity;
+        size_t length;
+        switch (readAllGrowing(readHttp, client, 2048, MAX_RELEASE_JSON, &buffer, &length, &capacity))
         {
+        case READ_ALL_OK:
+            break;
+        case READ_ALL_NO_MEMORY:
+            snprintf(error, sizeof(error), "Out of memory (largest free block %u bytes)", (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+            setState(UPDATE_STATE_ERROR, error);
+            goto cleanup;
+        case READ_ALL_TOO_LARGE:
+            setState(UPDATE_STATE_ERROR, "Release information too large");
+            goto cleanup;
+        default:
             setState(UPDATE_STATE_ERROR, "Error reading the release information");
             goto cleanup;
         }
-        if (read == 0)
-            break;
-        len += read;
-    }
-    buffer[len] = 0;
-
-    if (len >= MAX_RELEASE_JSON - 1)
-    {
-        setState(UPDATE_STATE_ERROR, "Release information too large");
-        goto cleanup;
     }
 
     {
