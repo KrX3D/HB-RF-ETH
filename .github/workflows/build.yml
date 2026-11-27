@@ -5,6 +5,12 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Merges to master queue up (each one gets its own release); other refs
+# cancel outdated runs
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -13,6 +19,8 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # tags are needed to compute the next version
 
       - uses: actions/setup-node@v4
         with:
@@ -34,6 +42,18 @@ jobs:
       - name: Check tag matches version.txt
         if: startsWith(github.ref, 'refs/tags/v')
         run: test "${GITHUB_REF_NAME#v}" = "$(cat version.txt)"
+
+      # Every merge to master is released as a new version (see the script);
+      # PR builds use the same number, so a test .bin shows the version its
+      # merge will get. version.txt is only changed inside the runner.
+      - name: Determine version
+        id: version
+        if: "!startsWith(github.ref, 'refs/tags/v')"
+        run: |
+          v=$(.github/scripts/next-version.sh)
+          printf '%s' "$v" > version.txt
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "Version: $v"
 
       - name: Build firmware
         run: pio run -e hb-rf-eth
@@ -84,9 +104,18 @@ jobs:
 
       # The firmware's online update reads the latest release of the configured
       # repository and installs its firmware_*.bin
-      - name: Publish release
+      - name: Publish release (manual tag)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
+          files: .pio/build/hb-rf-eth/firmware_*.bin
+          generate_release_notes: true
+
+      - name: Publish release (merge to master)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          target_commitish: ${{ github.sha }}
           files: .pio/build/hb-rf-eth/firmware_*.bin
           generate_release_notes: true

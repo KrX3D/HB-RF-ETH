@@ -192,7 +192,7 @@ Alternativ kann eine `.bin` Datei aus den Releases über die WebUI hochgeladen w
 
 Test-Builds: Jeder Pull Request bekommt einen Kommentar mit einem Link auf die gebaute `firmware_*.bin` (GitHub Login nötig, 90 Tage gültig). Builds von Branches stehen in der Zusammenfassung des jeweiligen Actions Laufs.
 
-Releases dieses Forks werden von GitHub Actions gebaut, sobald ein Tag `v<version>` (gleich `version.txt`) gepusht wird.
+Releases dieses Forks erstellt GitHub Actions automatisch bei jedem Merge nach `master`. Die Version ist `version.txt`, wenn diese höher als das neueste Tag ist, sonst das neueste Tag mit Patch + 1 (z.B. 1.4.1 → 1.4.2). Minor/Major Sprünge werden durch Ändern von `version.txt` gemacht. Test-Builds eines Pull Requests tragen schon die Version, die der Merge bekommt.
 
 ### Einbindung in piVCCU3 und debmatic
 Die Unterstützung für die Platine HB-RF-ETH ist in piVCCU3 ab Version 3.51.6-41 und in debmatic ab Version 3.51.6-46 eingebaut. Die Installation der Platine erfolgt über das Paket "hb-rf-eth". Weiteres Details findet man in der Installationsanleitung von piVCCU3 bzw. debmatic.
