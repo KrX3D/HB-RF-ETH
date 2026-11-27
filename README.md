@@ -186,6 +186,8 @@ Siehe Hilfe zum RPI-RF-MOD
 ### Firmware Updates
 Die Firmware prüft regelmäßig (Standard alle 8 Stunden) das neueste Release eines GitHub Repositories (Einstellungen → Update Quelle, Standard `alexreinert/HB-RF-ETH`, z.B. auf einen Fork änderbar). Ist eine neuere Version vorhanden, kann sie unter "Firmware" oder per MQTT / Home Assistant installiert werden; optional auch automatisch. Die Firmware wird per HTTPS geladen, mit der von GitHub angegebenen SHA-256 Prüfsumme verglichen (falls vorhanden), in den freien Firmware Slot geschrieben und die Platine startet neu.
 
+Ist die Update Quelle das Original (`alexreinert/HB-RF-ETH`), meldet die Firmware zusätzlich wie Version 1.3.0 Board, Seriennummer und Version an `debmatic.de` (Statistik des Autors, Zertifikat wird geprüft). Die Firmware selbst kommt immer aus dem GitHub Release. Bei einem Fork als Quelle wird nichts an debmatic.de gesendet.
+
 Kommt die neue Firmware nach dem Update nicht innerhalb von 3 Minuten ins Netzwerk oder stürzt sie beim Start ab, schaltet der Bootloader automatisch auf die vorherige Firmware zurück.
 
 Alternativ kann eine `.bin` Datei aus den Releases über die WebUI hochgeladen werden, danach "Jetzt neu starten".
