@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
 
@@ -40,12 +41,43 @@ jobs:
       - name: Host unit tests
         run: test/host/run.sh
 
-      - uses: actions/upload-artifact@v4
+      # Flashable image as a plain .bin (not zipped), for testing PR builds via
+      # the board's web UI (Firmware > upload)
+      - name: Upload firmware .bin
+        id: firmware
+        uses: actions/upload-artifact@v7
         with:
-          name: firmware
-          path: |
-            .pio/build/hb-rf-eth/firmware.bin
-            .pio/build/hb-rf-eth/*.bin
+          path: .pio/build/hb-rf-eth/firmware_*.bin
+          archive: false
+          if-no-files-found: error
+
+      # All images incl. bootloader and partition table, for flashing via serial
+      - uses: actions/upload-artifact@v7
+        with:
+          name: firmware-all
+          path: .pio/build/hb-rf-eth/*.bin
+
+      - name: Summary
+        run: echo "Firmware: [$(basename .pio/build/hb-rf-eth/firmware_*.bin)](${{ steps.firmware.outputs.artifact-url }}) (commit ${GITHUB_SHA::7})" >> "$GITHUB_STEP_SUMMARY"
+
+      # One comment per PR, updated on every push, with the link to the .bin
+      - name: Comment firmware link on PR
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          URL: ${{ steps.firmware.outputs.artifact-url }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          marker='<!-- firmware-build -->'
+          file=$(basename .pio/build/hb-rf-eth/firmware_*.bin)
+          body=$(printf '%s\n**Test firmware:** [%s](%s) (commit %s)\n\nInstall via the board web UI: Firmware > Firmware Datei > Hochladen. Download needs a GitHub login; the link expires after 90 days.' "$marker" "$file" "$URL" "${SHA::7}")
+          id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -n1)
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -f body="$body" > /dev/null
+          else
+            gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -f body="$body" > /dev/null
+          fi
 
       # The firmware's online update reads the latest release of the configured
       # repository and installs its firmware_*.bin
